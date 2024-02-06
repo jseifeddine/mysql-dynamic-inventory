@@ -1,0 +1,63 @@
+#   MySQL Dynamic Inventory to query particular hosts from 
+#   Icinga DB selecting host.customvars and service_state output
+#   for tracking and reporting on problematic hosts
+#
+#   Required columns: 
+#   'inventory_group', 'inventory_hostname'
+#
+#   TLDR:
+#   Besides the required columns, each column will be assigned 
+#   as an ansible hostvar dynamically.
+
+plugin: mysql-dynamic-inventory
+db_host: icingadb-mysql-host
+db_user: ansible
+db_pass: ansible-mysql-pass
+db_name: icingadb
+db_query: |
+    SELECT 
+        'openwrt' as inventory_group,
+        host.address as ansible_host, 
+        host.name as inventory_hostname,
+        MAX(REPLACE(REPLACE(REPLACE(service_state.output, 'SNMP OK - FirmwareVersion', ''), '"', ''), '|', '')) as firmware,
+        MAX(cv1.value) AS customer,
+        MAX(cv2.value) AS location,
+        MAX(REPLACE(REPLACE(REPLACE(ss_mobile.output, 'SNMP CRITICAL - status *', ''), '"', ''), '*', '')) as operator
+    FROM 
+        host
+    JOIN 
+        service_state ON host.id = service_state.host_id
+    JOIN 
+        host_customvar hcv1 ON host.id = hcv1.host_id
+    JOIN 
+        customvar cv1 ON hcv1.customvar_id = cv1.id AND cv1.name = 'customer'
+    JOIN 
+        host_customvar hcv2 ON host.id = hcv2.host_id
+    JOIN 
+        customvar cv2 ON hcv2.customvar_id = cv2.id AND cv2.name = 'location'
+    JOIN 
+        service ON host.id = service.host_id
+    JOIN 
+        service_state ss_mobile ON host.id = ss_mobile.host_id AND service.id = ss_mobile.service_id AND service.name = 'MobileConnection'
+    WHERE 
+        host.id IN (
+            SELECT 
+                DISTINCT host.id 
+            FROM 
+                host 
+            JOIN 
+                service_state ON host.id = service_state.host_id 
+            WHERE 
+                (service_state.output LIKE 'SNMP CRITICAL - status %disconnected%' 
+                OR service_state.output LIKE 'SNMP CRITICAL - status %Disconnected%')
+                AND service_state.host_id NOT IN (
+                    SELECT 
+                        host_id 
+                    FROM 
+                        service_state 
+                    WHERE 
+                        output LIKE 'SNMP CRITICAL - SimStatus %\"not inserted\"%'
+                )
+        )
+    GROUP BY
+        host.id;

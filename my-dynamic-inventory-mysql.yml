@@ -1,0 +1,14 @@
+#   Required columns: 
+#   'inventory_group', 'inventory_hostname'
+#
+#   TLDR:
+#   Besides the required columns, each column will be assigned 
+#   as an ansible hostvar dynamically.
+
+plugin: mysql-dynamic-inventory
+db_host: mysql_server
+db_user: mysql_user
+db_pass: mysql_pass
+db_name: mysql_database
+db_query: |
+  SELECT 'some_inventory_hostname' as inventory_hostname, 'some_inventory_group' as inventory_group, 'some_ansible_host' as ansible_host, 'somerandomvar' as coolrandomvar

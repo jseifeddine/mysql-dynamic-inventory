@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
-
-from ansible.plugins.inventory import BaseInventoryPlugin
 from ansible.errors import AnsibleError
+from ansible.plugins.inventory import BaseInventoryPlugin
+from ansible.utils.display import Display
 import pymysql
+
+display = Display()
 
 DOCUMENTATION = r'''
     name: mysql-dynamic-inventory
@@ -48,6 +49,17 @@ class InventoryModule(BaseInventoryPlugin):
         '''Parses the inventory file'''
         super(InventoryModule, self).parse(inventory, loader, path, cache)
         self._read_config_data(path)
+
+        self.templar.available_variables = self._vars
+
+        for option in self._options:
+            try:
+                if self.get_option(option):
+                    templated_option = self.templar.template(self.get_option(option))
+                    self.set_option(option, templated_option)
+            except Exception as e:
+                raise AnsibleError(f"Error processing templating for {option}: {str(e)}")
+        
         self._fetch_hosts()
 
     def _fetch_hosts(self):
